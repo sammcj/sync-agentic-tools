@@ -104,12 +104,14 @@ sync-agentic-tools --dry-run
 - Auto-cleanup based on age and count retention policies
 
 **Cross-tool propagation (propagate.py)**
-- Copies files between tools with transformations in three modes:
+- Copies files or directories between tools with transformations in three modes:
   - **Source→source**: Direct copy between tool source directories (fast, no target)
   - **Target→target**: Copy between tool target directories (traditional)
   - **Absolute paths**: Bypass tool config entirely
+- Supports recursive directory propagation - all files are copied with transformations applied
 - Supports `sed` regex replacements and section removal
 - Example: `~/.claude/CLAUDE.md` → `~/.gemini/GEMINI.md` with "Claude Code" → "Gemini CLI"
+- Example: `~/.claude/commands/` → `~/Documents/Cline/Workflows/` (entire directory)
 - Runs after sync operations complete
 - Validation warns if propagated files are also in sync include patterns
 

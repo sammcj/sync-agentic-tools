@@ -1,4 +1,4 @@
-# ~/.sync-agentic-tools.yaml
+# ~/.agentic-sync.yaml
 settings:
   # Backup settings
   backup_retention_days: 90          # Keep backups for 90 days
@@ -34,8 +34,7 @@ exclude_rulesets:
     - "**/*-backup.*"        # Exclude backup files
 
   private:
-    - "**/*-private.*"       # Exclude private files
-    - "**/private/**"        # Exclude private directories
+    - "skills/private-*/**"  # Exclude private skills
 
 # Tools define named applications to manage synchronisation for
 # Propagation rules at the bottom can reference these tools (or use direct file paths)
@@ -58,10 +57,6 @@ tools:
       - common
       - private
 
-    # Additional tool-specific excludes (optional)
-    exclude:
-      - "sessions/**"              # Claude-specific session data
-
     special_handling:
       settings.json:
         mode: extract_keys
@@ -80,10 +75,6 @@ tools:
     # Reference common rulesets
     exclude_rulesets:
       - common
-
-    # Additional tool-specific excludes (optional)
-    exclude:
-      - "cache/**"                 # Cline-specific cache data
 
   # Example: Gemini CLI configuration
   # gemini:
@@ -150,6 +141,20 @@ propagate:
           - type: remove_xml_sections
             sections:
               - "CLAUDE_PARALLEL_TASKS"
+
+  - source_path: ~/.claude/commands
+    exclude:
+      - "CLAUDE.md"           # Exclude specific file
+      - "*.bak"               # Exclude by pattern
+      - "private-*"           # Exclude files starting with "private-"
+      - "test/*"              # Exclude files in test directory
+    targets:
+      - dest_path: ~/Documents/Cline/Workflows
+        transforms:
+          - type: sed
+            pattern: 's/Claude Code/Cline/g'
+          - type: sed
+            pattern: 's/Claude/Cline/g'
 
   # Example: Source→Source propagation using absolute paths
   # (For direct local-to-local copies without going through targets)

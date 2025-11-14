@@ -296,3 +296,96 @@ def show_rename_prompt(old_path: str, new_path: str, dest: str) -> str:
     mapping = {"y": "rename", "n": "separate"}
 
     return mapping[choice]
+
+
+def show_reverse_sync_prompt(file_path: str, source_info: str, target_info: str) -> str:
+    """
+    Show reverse sync suggestion prompt when target is newer.
+
+    Args:
+        file_path: Path to file
+        source_info: Info about source version (timestamp)
+        target_info: Info about target version (timestamp)
+
+    Returns:
+        User choice: "pull", "push_anyway", "diff", "skip"
+    """
+    console.print(f"\n[bold yellow]TARGET NEWER:[/bold yellow] {file_path}")
+    console.print(f"  Source: {source_info}")
+    console.print(f"  Target: {target_info} (newer)")
+    console.print("\n[yellow]The target file is newer than the source.[/yellow]")
+    console.print("[yellow]Consider pulling from target instead of pushing.[/yellow]")
+    console.print()
+
+    choices = ["p", "w", "d", "s"]
+    choice = prompt_user_choice(
+        "[P]ull from target / Push any[W]ay / [D]iff / [S]kip",
+        choices,
+    )
+
+    mapping = {
+        "p": "pull",
+        "w": "push_anyway",
+        "d": "diff",
+        "s": "skip",
+    }
+
+    return mapping[choice]
+
+
+def show_orphaned_files_prompt(orphan_count: int) -> str:
+    """
+    Show prompt for handling orphaned files.
+
+    Args:
+        orphan_count: Number of orphaned files found
+
+    Returns:
+        User choice: "delete_all", "sync_back_all", "select", "skip"
+    """
+    console.print(f"\n[bold yellow]Found {orphan_count} orphaned file(s)[/bold yellow]")
+    console.print("[yellow]These files exist in target but not in source.[/yellow]")
+    console.print()
+
+    choices = ["d", "s", "i", "k"]
+    choice = prompt_user_choice(
+        "[D]elete all / [S]ync all back / Select \\[i]ndividually / S\\[k]ip",
+        choices,
+    )
+
+    mapping = {
+        "d": "delete_all",
+        "s": "sync_back_all",
+        "i": "select",
+        "k": "skip",
+    }
+
+    return mapping[choice]
+
+
+def show_orphaned_file_action_prompt(file_path: str) -> str:
+    """
+    Show prompt for handling a single orphaned file.
+
+    Args:
+        file_path: Relative path to the orphaned file
+
+    Returns:
+        User choice: "delete", "sync_back", "skip", "view"
+    """
+    console.print(f"\n[yellow]{file_path}[/yellow]")
+
+    choices = ["d", "s", "v", "k"]
+    choice = prompt_user_choice(
+        "[D]elete / [S]ync back / \\[V]iew in editor / S\\[k]ip",
+        choices,
+    )
+
+    mapping = {
+        "d": "delete",
+        "s": "sync_back",
+        "v": "view",
+        "k": "skip",
+    }
+
+    return mapping[choice]

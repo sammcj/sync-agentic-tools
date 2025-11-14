@@ -39,6 +39,7 @@ class SyncPlan:
     files_to_copy: list[tuple[Path, Path]]  # (source, dest)
     files_to_delete: list[tuple[Path, str]]  # (path, location)
     conflicts: list[tuple[Path, Path]]  # (source, target)
+    reverse_suggestions: list[tuple[Path, Path]]  # (source, target) where target is newer
 
 
 class SyncEngine:
@@ -132,7 +133,12 @@ class SyncEngine:
         # Create sync plan
         plan = self._create_sync_plan(tool, direction, state)
 
-        if not plan.files_to_copy and not plan.files_to_delete and not plan.conflicts:
+        if (
+            not plan.files_to_copy
+            and not plan.files_to_delete
+            and not plan.conflicts
+            and not plan.reverse_suggestions
+        ):
             show_success(f"No changes to sync for {tool_name}")
             return True
 
@@ -159,6 +165,7 @@ class SyncEngine:
             files_to_copy=[],
             files_to_delete=[],
             conflicts=[],
+            reverse_suggestions=[],
         )
 
         # Find files in source and target
@@ -218,8 +225,16 @@ class SyncEngine:
             if not self._files_are_identical_with_special_handling(
                 plan.tool, source_path, target_path
             ):
-                # Different content - push source to target
-                plan.files_to_copy.append((source_path, target_path))
+                # Different content - check if target is newer
+                source_mtime = source_path.stat().st_mtime
+                target_mtime = target_path.stat().st_mtime
+
+                # If target is newer, suggest reverse sync instead of pushing
+                if target_mtime > source_mtime:
+                    plan.reverse_suggestions.append((source_path, target_path))
+                else:
+                    # Push source to target
+                    plan.files_to_copy.append((source_path, target_path))
         elif not source_path and target_path:
             # File deleted from source
             if file_state:  # Was previously synced
@@ -318,10 +333,51 @@ class SyncEngine:
             confirm_action,
             show_conflict_resolution_prompt,
             show_deletion_prompt,
+            show_reverse_sync_prompt,
         )
 
         try:
-            # Handle conflicts first
+            # Handle reverse suggestions first (when target is newer during push)
+            if plan.reverse_suggestions:
+                show_warning(
+                    f"Found {len(plan.reverse_suggestions)} file(s) where target is newer than source"
+                )
+
+                for source_path, target_path in plan.reverse_suggestions:
+                    relpath = str(source_path.relative_to(tool.source))
+
+                    from datetime import datetime
+
+                    source_mtime = source_path.stat().st_mtime
+                    target_mtime = target_path.stat().st_mtime
+
+                    source_info = f"modified {datetime.fromtimestamp(source_mtime).strftime('%Y-%m-%d %H:%M:%S')}"
+                    target_info = f"modified {datetime.fromtimestamp(target_mtime).strftime('%Y-%m-%d %H:%M:%S')}"
+
+                    choice = show_reverse_sync_prompt(relpath, source_info, target_info)
+
+                    if choice == "diff":
+                        # Show diff and ask again
+                        diff_lines, _ = generate_unified_diff(source_path, target_path)
+                        from .ui import show_diff
+
+                        show_diff(relpath, diff_lines, "source", "target")
+                        choice = show_reverse_sync_prompt(relpath, source_info, target_info)
+
+                    if choice == "pull":
+                        # Pull from target to source
+                        plan.files_to_copy.append((target_path, source_path))
+                        show_info(f"Will pull {relpath} from target to source")
+                    elif choice == "push_anyway":
+                        # Push source to target despite being older
+                        plan.files_to_copy.append((source_path, target_path))
+                        show_info(f"Will push {relpath} from source to target (overriding newer target)")
+                    # else: skip
+
+                # Clear reverse suggestions as they're now resolved
+                plan.reverse_suggestions.clear()
+
+            # Handle conflicts
             if plan.conflicts:
                 show_warning(f"Found {len(plan.conflicts)} conflict(s) - need resolution")
 
@@ -445,10 +501,16 @@ class SyncEngine:
                         safe_copy_file(source, dest, create_parents=True)
 
                     # Update state
-                    if plan.direction == SyncDirection.PUSH:
+                    # Determine base_path based on which file is the actual source
+                    # For files being copied: source contains the file, dest is the destination
+                    # Need to determine which directory the source file belongs to
+                    if source.is_relative_to(tool.source):
                         base_path = tool.source
-                    else:
+                    elif source.is_relative_to(tool.target):
                         base_path = tool.target
+                    else:
+                        # Fallback to plan direction
+                        base_path = tool.source if plan.direction == SyncDirection.PUSH else tool.target
 
                     metadata = FileMetadata.from_file(source, base_path)
                     state.update_file(metadata, tool.name)
@@ -515,6 +577,18 @@ class SyncEngine:
         for source, target in plan.conflicts:
             relpath = str(source.relative_to(plan.tool.source))
             changes.append(FileChange(relpath, ChangeType.CONFLICT))
+
+        for source, target in plan.reverse_suggestions:
+            relpath = str(source.relative_to(plan.tool.source))
+            diff_stats = count_diff_lines(source, target)
+            changes.append(
+                FileChange(
+                    relpath,
+                    ChangeType.MODIFIED,
+                    diff_stats,
+                    warnings=["Target is newer than source"],
+                )
+            )
 
         return changes
 

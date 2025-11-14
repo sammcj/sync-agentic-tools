@@ -72,6 +72,7 @@ class PropagationRule:
     source_file: str | None = None
     source_path: str | None = None
     targets: list[PropagationTarget] = field(default_factory=list)
+    exclude: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -171,7 +172,9 @@ class Config:
         for rule_data in data.get("propagate", []):
             targets = []
             for target_data in rule_data.get("targets", []):
-                targets.append(PropagationTarget(**target_data))
+                # Filter out exclude from target_data as it belongs to the rule level
+                filtered_target_data = {k: v for k, v in target_data.items() if k != "exclude"}
+                targets.append(PropagationTarget(**filtered_target_data))
 
             propagate.append(
                 PropagationRule(
@@ -179,6 +182,7 @@ class Config:
                     source_file=rule_data.get("source_file"),
                     source_path=rule_data.get("source_path"),
                     targets=targets,
+                    exclude=rule_data.get("exclude", []),
                 )
             )
 

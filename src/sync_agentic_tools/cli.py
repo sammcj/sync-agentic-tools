@@ -14,16 +14,30 @@ from .ui import console, show_error, show_info, show_success, show_warning
 
 @click.group(invoke_without_command=True)
 @click.option("--version", is_flag=True, help="Show version and exit")
+@click.option("--tool", "-t", default=None, help="Sync specific tool only")
+@click.option(
+    "--push", "direction", flag_value="push", default=True, help="Push source → target (default)"
+)
+@click.option("--pull", "direction", flag_value="pull", help="Pull target → source")
+@click.option("--bidirectional", "direction", flag_value="sync", help="Bidirectional sync")
+@click.option("--dry-run", "-n", is_flag=True, help="Show what would happen without making changes")
+@click.option("--auto", "-y", is_flag=True, help="Auto-resolve conflicts using timestamps")
+@click.option("--config", "-c", type=click.Path(exists=True), default=None, help="Config file path")
 @click.pass_context
-def cli(ctx, version):
-    """Agentic Sync - Configuration synchronisation for agentic coding tools."""
+def cli(ctx, version, tool, direction, dry_run, auto, config):
+    """Agentic Sync - Configuration synchronisation for agentic coding tools.
+
+    By default, runs 'sync --push' to push source → target.
+
+    Use 'sync-agentic-tools sync --help' for detailed sync options.
+    """
     if version:
         console.print(f"agentic-sync version {__version__}")
         ctx.exit(0)
 
     # If no subcommand, run sync (default behaviour)
     if ctx.invoked_subcommand is None:
-        ctx.invoke(sync_cmd)
+        ctx.invoke(sync_cmd, tool=tool, direction=direction, dry_run=dry_run, auto=auto, config=config)
 
 
 @cli.command("sync")
