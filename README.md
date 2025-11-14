@@ -37,6 +37,8 @@ Sync config, rules, workflows, skills and templates across agentic coding tools 
 - **State tracking** across multiple machines
 - **Conflict detection** with manual resolution
 
+![screenshot](screenshot-1.png)
+
 ## Installation
 
 ```bash
