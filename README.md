@@ -97,7 +97,7 @@ The configuration file (`~/.sync-agentic-tools.yaml`) defines:
 ### Example Configuration
 
 ```yaml
-# ~/.sync-agentic-tools.yaml
+# ~/.agentic-sync.yaml
 settings:
   # Backup settings
   backup_retention_days: 90          # Keep backups for 90 days
@@ -133,8 +133,7 @@ exclude_rulesets:
     - "**/*-backup.*"        # Exclude backup files
 
   private:
-    - "**/*-private.*"       # Exclude private files
-    - "**/private/**"        # Exclude private directories
+    - "skills/private-*/**"  # Exclude private skills
 
 # Tools define named applications to manage synchronisation for
 # Propagation rules at the bottom can reference these tools (or use direct file paths)
@@ -157,10 +156,6 @@ tools:
       - common
       - private
 
-    # Additional tool-specific excludes (optional)
-    exclude:
-      - "sessions/**"              # Claude-specific session data
-
     special_handling:
       settings.json:
         mode: extract_keys
@@ -180,10 +175,6 @@ tools:
     exclude_rulesets:
       - common
 
-    # Additional tool-specific excludes (optional)
-    exclude:
-      - "cache/**"                 # Cline-specific cache data
-
   # Example: Gemini CLI configuration
   # gemini:
   #   enabled: false
@@ -200,6 +191,7 @@ tools:
   #   exclude:
   #     - "**/logs/**"
   #     - "GEMINI.md"             # Exclude - auto-propagated from Claude
+
 
 # Propagation rules to copy files between tools with transformations
 # Supports two modes:
@@ -249,6 +241,20 @@ propagate:
             sections:
               - "CLAUDE_PARALLEL_TASKS"
 
+  - source_path: ~/.claude/commands
+    exclude:
+      - "CLAUDE.md"           # Exclude specific file
+      - "*.bak"               # Exclude by pattern
+      - "private-*"           # Exclude files starting with "private-"
+      - "test/*"              # Exclude files in test directory
+    targets:
+      - dest_path: ~/Documents/Cline/Workflows
+        transforms:
+          - type: sed
+            pattern: 's/Claude Code/Cline/g'
+          - type: sed
+            pattern: 's/Claude/Cline/g'
+
   # Example: Source→Source propagation using absolute paths
   # (For direct local-to-local copies without going through targets)
   # - source_path: ~/.claude/CLAUDE.md
@@ -263,6 +269,7 @@ propagate:
   #         - type: sed
   #           pattern: 's/Claude Code/Codex/g'
 
+
   # Example: Mixed - tool-based + absolute paths
   # - source_tool: claude
   #   source_file: skills/shell-scripting.md
@@ -274,6 +281,7 @@ propagate:
   #       transforms:
   #         - type: sed
   #           pattern: 's/Claude/Codex/g'
+
 ```
 
 ## Terminology
