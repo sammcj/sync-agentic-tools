@@ -60,16 +60,18 @@ def show_summary(
         console.print(f"[green]✓ No changes to sync for {tool_name}[/green]")
         return
 
-    # Build title with paths if provided
-    title = f"Changes for {tool_name} ({direction})"
-    if source_path and target_path:
-        title += f"\n[dim]Source: {source_path} → Target: {target_path}[/dim]"
-
     # Create table
+    title = f"Changes for {tool_name} ({direction})"
     table = Table(title=title, show_header=True)
     table.add_column("File", style="cyan", no_wrap=False)
     table.add_column("Type", style="magenta")
     table.add_column("Changes", style="yellow", justify="right")
+
+    # Add source/target paths as first row if provided
+    if source_path and target_path:
+        table.add_row(f"[bold dim]Source:[/bold dim] {source_path}", "", "")
+        table.add_row(f"[bold dim]Target:[/bold dim] {target_path}", "", "")
+        table.add_section()
 
     # Categorise changes
     modified = [c for c in changes if c.change_type == ChangeType.MODIFIED]

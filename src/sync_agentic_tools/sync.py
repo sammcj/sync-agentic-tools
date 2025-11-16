@@ -41,6 +41,7 @@ class SyncPlan:
     conflicts: list[tuple[Path, Path]]  # (source, target)
     reverse_suggestions: list[tuple[Path, Path]]  # (source, target) where target is newer
     orphaned_files: list[Path]  # Files in target with no source and no state
+    confirmed_deletions: set[Path]  # Files already confirmed for deletion (skip re-prompting)
 
 
 class SyncEngine:
@@ -169,6 +170,7 @@ class SyncEngine:
             conflicts=[],
             reverse_suggestions=[],
             orphaned_files=[],
+            confirmed_deletions=set(),
         )
 
         # Find files in source and target
@@ -494,6 +496,7 @@ class SyncEngine:
                     for orphan_path in plan.orphaned_files:
                         relpath = str(orphan_path.relative_to(tool.target))
                         plan.files_to_delete.append((orphan_path, "target"))
+                        plan.confirmed_deletions.add(orphan_path)  # Mark as already confirmed
                         show_info(f"Will delete orphaned file: {relpath}")
                 elif bulk_choice == "sync_back_all":
                     # Sync all back to source
@@ -510,6 +513,7 @@ class SyncEngine:
 
                         if choice == "delete":
                             plan.files_to_delete.append((orphan_path, "target"))
+                            plan.confirmed_deletions.add(orphan_path)  # Mark as already confirmed
                             show_info(f"Will delete: {relpath}")
                         elif choice == "sync_back":
                             source_dest = tool.source / relpath
@@ -530,6 +534,7 @@ class SyncEngine:
                             choice = show_orphaned_file_action_prompt(relpath)
                             if choice == "delete":
                                 plan.files_to_delete.append((orphan_path, "target"))
+                                plan.confirmed_deletions.add(orphan_path)  # Mark as already confirmed
                             elif choice == "sync_back":
                                 source_dest = tool.source / relpath
                                 plan.files_to_copy.append((orphan_path, source_dest))
@@ -546,6 +551,12 @@ class SyncEngine:
                     relpath = str(
                         path.relative_to(tool.source if location == "source" else tool.target)
                     )
+
+                    # Skip confirmation if already confirmed (e.g., from orphaned file handling)
+                    if path in plan.confirmed_deletions:
+                        confirmed_deletions.append((path, location))
+                        state.record_deletion(f"{tool.name}/{relpath}", "unknown", "confirmed")
+                        continue
 
                     # Check if confirmation is needed based on location
                     needs_confirmation = (
