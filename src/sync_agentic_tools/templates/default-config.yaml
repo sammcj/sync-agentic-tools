@@ -9,8 +9,8 @@ settings:
   respect_gitignore: true            # Automatically exclude files from .gitignore
 
   # Safety settings
-  confirm_destructive_source: true    # Ask before overwriting source files
-  confirm_destructive_target: false   # Don't ask before copying to target
+  confirm_destructive_source: true   # Ask before overwriting source files
+  confirm_destructive_target: true   # Don't ask before copying to target
   show_diff_threshold: 1             # Show diff for files larger than 1 lines
 
   # Behaviour
@@ -155,6 +155,8 @@ propagate:
             pattern: 's/Claude Code/Cline/g'
           - type: sed
             pattern: 's/Claude/Cline/g'
+
+
 
   # Example: Source→Source propagation using absolute paths
   # (For direct local-to-local copies without going through targets)

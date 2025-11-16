@@ -20,6 +20,7 @@ class ChangeType(Enum):
     NEW = "new"
     DELETED = "deleted"
     CONFLICT = "conflict"
+    ORPHANED = "orphaned"
 
 
 class FileChange:
@@ -38,7 +39,13 @@ class FileChange:
         self.warnings = warnings or []
 
 
-def show_summary(changes: list[FileChange], tool_name: str, direction: str) -> None:
+def show_summary(
+    changes: list[FileChange],
+    tool_name: str,
+    direction: str,
+    source_path: str | None = None,
+    target_path: str | None = None,
+) -> None:
     """
     Display summary of changes.
 
@@ -46,13 +53,20 @@ def show_summary(changes: list[FileChange], tool_name: str, direction: str) -> N
         changes: List of file changes
         tool_name: Name of tool being synced
         direction: Direction of sync (e.g., "source → target")
+        source_path: Optional source directory path
+        target_path: Optional target directory path
     """
     if not changes:
         console.print(f"[green]✓ No changes to sync for {tool_name}[/green]")
         return
 
+    # Build title with paths if provided
+    title = f"Changes for {tool_name} ({direction})"
+    if source_path and target_path:
+        title += f"\n[dim]Source: {source_path} → Target: {target_path}[/dim]"
+
     # Create table
-    table = Table(title=f"Changes for {tool_name} ({direction})", show_header=True)
+    table = Table(title=title, show_header=True)
     table.add_column("File", style="cyan", no_wrap=False)
     table.add_column("Type", style="magenta")
     table.add_column("Changes", style="yellow", justify="right")
@@ -62,6 +76,7 @@ def show_summary(changes: list[FileChange], tool_name: str, direction: str) -> N
     new = [c for c in changes if c.change_type == ChangeType.NEW]
     deleted = [c for c in changes if c.change_type == ChangeType.DELETED]
     conflicts = [c for c in changes if c.change_type == ChangeType.CONFLICT]
+    orphaned = [c for c in changes if c.change_type == ChangeType.ORPHANED]
 
     # Add modified files
     if modified:
@@ -93,6 +108,13 @@ def show_summary(changes: list[FileChange], tool_name: str, direction: str) -> N
         table.add_row("[bold red]Conflicts[/bold red]", "", "")
         for i, change in enumerate(conflicts, len(modified) + len(new) + len(deleted) + 1):
             table.add_row(f"[{i}] {change.relative_path}", "[red]conflict[/red]", "")
+
+    # Add orphaned files
+    if orphaned:
+        table.add_section()
+        table.add_row("[bold yellow]Orphaned Files[/bold yellow]", "", "")
+        for i, change in enumerate(orphaned, len(modified) + len(new) + len(deleted) + len(conflicts) + 1):
+            table.add_row(f"[{i}] {change.relative_path}", "[yellow]orphaned[/yellow]", "(not in source)")
 
     console.print(table)
 

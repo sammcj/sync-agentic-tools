@@ -40,6 +40,7 @@ class SyncPlan:
     files_to_delete: list[tuple[Path, str]]  # (path, location)
     conflicts: list[tuple[Path, Path]]  # (source, target)
     reverse_suggestions: list[tuple[Path, Path]]  # (source, target) where target is newer
+    orphaned_files: list[Path]  # Files in target with no source and no state
 
 
 class SyncEngine:
@@ -138,6 +139,7 @@ class SyncEngine:
             and not plan.files_to_delete
             and not plan.conflicts
             and not plan.reverse_suggestions
+            and not plan.orphaned_files
         ):
             show_success(f"No changes to sync for {tool_name}")
             return True
@@ -145,7 +147,7 @@ class SyncEngine:
         # Show summary
         changes = self._plan_to_changes(plan)
         direction_str = self._direction_str(direction)
-        show_summary(changes, tool_name, direction_str)
+        show_summary(changes, tool_name, direction_str, str(tool.source), str(tool.target))
 
         # In dry-run mode, stop here
         if self.dry_run:
@@ -166,6 +168,7 @@ class SyncEngine:
             files_to_delete=[],
             conflicts=[],
             reverse_suggestions=[],
+            orphaned_files=[],
         )
 
         # Find files in source and target
@@ -177,13 +180,48 @@ class SyncEngine:
             self.config.settings.respect_gitignore,
         )
 
+        # If not following symlinks, find which source paths are symlinks
+        # and exclude their target equivalents from scanning
+        target_exclude = list(tool.exclude)
+        if not self.config.settings.follow_symlinks:
+            # Find all symlinks in source that match include patterns
+            from .utils import matches_patterns
+
+            symlink_paths = []
+            for pattern in tool.include:
+                # Handle glob patterns
+                if "**" in pattern:
+                    # Recursive search
+                    base_parts = pattern.split("**")[0].strip("/").split("/")
+                    if base_parts and base_parts[0]:
+                        check_dir = tool.source / base_parts[0]
+                    else:
+                        check_dir = tool.source
+
+                    if check_dir.exists() and check_dir.is_dir():
+                        for item in check_dir.iterdir():
+                            if item.is_symlink():
+                                rel_path = str(item.relative_to(tool.source))
+                                if matches_patterns(rel_path, tool.include, tool.exclude):
+                                    symlink_paths.append(f"{rel_path}/**")
+
+            if symlink_paths:
+                target_exclude.extend(symlink_paths)
+                show_info(
+                    f"Excluding symlinked paths from target scan: {', '.join(symlink_paths)}"
+                )
+
         target_files = find_files(
             tool.target,
             tool.include,
-            tool.exclude,
+            target_exclude,  # Use extended exclude list
             self.config.settings.follow_symlinks,
             self.config.settings.respect_gitignore,
         )
+
+        # Debug: Show what was found
+        show_info(f"Source: {tool.source} ({len(source_files)} files)")
+        show_info(f"Target: {tool.target} ({len(target_files)} files)")
 
         # Build path mappings
         source_by_relpath = {str(f.relative_to(tool.source)): f for f in source_files}
@@ -236,9 +274,11 @@ class SyncEngine:
                     # Push source to target
                     plan.files_to_copy.append((source_path, target_path))
         elif not source_path and target_path:
-            # File deleted from source
-            if file_state:  # Was previously synced
+            # File deleted from source or orphaned in target
+            if file_state:  # Was previously synced - deletion candidate
                 plan.files_to_delete.append((target_path, "target"))
+            else:  # Never synced - orphaned file
+                plan.orphaned_files.append(target_path)
 
     def _plan_pull(
         self,
@@ -421,6 +461,83 @@ class SyncEngine:
                 # Clear conflicts as they're now resolved
                 plan.conflicts.clear()
 
+            # Handle orphaned files
+            if plan.orphaned_files:
+                from .ui import show_orphaned_file_action_prompt, show_orphaned_files_prompt
+
+                show_warning(
+                    f"Found {len(plan.orphaned_files)} orphaned file(s) in target (never synced)"
+                )
+
+                # Check if orphaned files might be due to symlinks not being followed
+                if not self.config.settings.follow_symlinks:
+                    # Check if any orphaned files are under directories that might be symlinks
+                    orphan_dirs = set()
+                    for orphan_path in plan.orphaned_files:
+                        relpath = str(orphan_path.relative_to(tool.target))
+                        parts = relpath.split("/")
+                        if len(parts) > 1:
+                            orphan_dirs.add(parts[0] + "/" + parts[1])  # First two levels
+
+                    if orphan_dirs:
+                        show_warning(
+                            f"Note: 'follow_symlinks' is disabled. If source has symlinks, "
+                            f"their files won't be detected. Affected paths: {', '.join(sorted(orphan_dirs)[:5])}"
+                            + ("..." if len(orphan_dirs) > 5 else "")
+                        )
+
+                # Ask user what to do with all orphaned files
+                bulk_choice = show_orphaned_files_prompt(len(plan.orphaned_files))
+
+                if bulk_choice == "delete_all":
+                    # Delete all orphaned files
+                    for orphan_path in plan.orphaned_files:
+                        relpath = str(orphan_path.relative_to(tool.target))
+                        plan.files_to_delete.append((orphan_path, "target"))
+                        show_info(f"Will delete orphaned file: {relpath}")
+                elif bulk_choice == "sync_back_all":
+                    # Sync all back to source
+                    for orphan_path in plan.orphaned_files:
+                        relpath = str(orphan_path.relative_to(tool.target))
+                        source_dest = tool.source / relpath
+                        plan.files_to_copy.append((orphan_path, source_dest))
+                        show_info(f"Will sync back to source: {relpath}")
+                elif bulk_choice == "select":
+                    # Handle individually
+                    for orphan_path in plan.orphaned_files:
+                        relpath = str(orphan_path.relative_to(tool.target))
+                        choice = show_orphaned_file_action_prompt(relpath)
+
+                        if choice == "delete":
+                            plan.files_to_delete.append((orphan_path, "target"))
+                            show_info(f"Will delete: {relpath}")
+                        elif choice == "sync_back":
+                            source_dest = tool.source / relpath
+                            plan.files_to_copy.append((orphan_path, source_dest))
+                            show_info(f"Will sync back to source: {relpath}")
+                        elif choice == "view":
+                            # Open in editor (using $EDITOR or 'less')
+                            import os
+                            import subprocess
+
+                            editor = os.environ.get("EDITOR", "less")
+                            try:
+                                subprocess.run([editor, str(orphan_path)], check=False)
+                            except Exception as e:
+                                show_error(f"Failed to open editor: {e}")
+
+                            # Ask again after viewing
+                            choice = show_orphaned_file_action_prompt(relpath)
+                            if choice == "delete":
+                                plan.files_to_delete.append((orphan_path, "target"))
+                            elif choice == "sync_back":
+                                source_dest = tool.source / relpath
+                                plan.files_to_copy.append((orphan_path, source_dest))
+                        # else: skip
+
+                # Clear orphaned files as they're now handled
+                plan.orphaned_files.clear()
+
             # Handle deletions with confirmation
             if plan.files_to_delete:
                 confirmed_deletions = []
@@ -430,7 +547,14 @@ class SyncEngine:
                         path.relative_to(tool.source if location == "source" else tool.target)
                     )
 
-                    if self.config.settings.confirm_destructive_source and location == "source":
+                    # Check if confirmation is needed based on location
+                    needs_confirmation = (
+                        self.config.settings.confirm_destructive_source and location == "source"
+                    ) or (
+                        self.config.settings.confirm_destructive_target and location == "target"
+                    )
+
+                    if needs_confirmation:
                         choice = show_deletion_prompt(
                             relpath,
                             "target" if location == "source" else "source",
@@ -444,7 +568,7 @@ class SyncEngine:
                             show_info(f"Skipped deletion of {relpath}")
                         # else keep_both: do nothing
                     else:
-                        # Auto-delete for target files (less dangerous)
+                        # Auto-delete (no confirmation required)
                         confirmed_deletions.append((path, location))
 
                 plan.files_to_delete = confirmed_deletions
@@ -525,7 +649,8 @@ class SyncEngine:
                 try:
                     from .files import safe_delete_file
 
-                    safe_delete_file(path, backup=True)
+                    # Don't create .deleted files - BackupManager already handles backups
+                    safe_delete_file(path, backup=False)
                     relpath = str(
                         path.relative_to(tool.source if location == "source" else tool.target)
                     )
@@ -587,6 +712,16 @@ class SyncEngine:
                     ChangeType.MODIFIED,
                     diff_stats,
                     warnings=["Target is newer than source"],
+                )
+            )
+
+        for orphan_path in plan.orphaned_files:
+            relpath = str(orphan_path.relative_to(plan.tool.target))
+            changes.append(
+                FileChange(
+                    relpath,
+                    ChangeType.ORPHANED,
+                    warnings=["File exists in target but not in source (never synced)"],
                 )
             )
 
