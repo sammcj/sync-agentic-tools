@@ -277,7 +277,7 @@ def propagate_file(
                 if orphaned:
                     from .ui import show_orphaned_file_action_prompt, show_orphaned_files_prompt
 
-                    show_info(f"These files exist in target but not in source:")
+                    show_info("These files exist in target but not in source:")
                     for orphan in orphaned:
                         relative = orphan.relative_to(target_base)
                         show_info(f"  - {relative}")

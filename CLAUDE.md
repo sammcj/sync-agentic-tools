@@ -82,7 +82,7 @@ sync-agentic-tools --dry-run
 
 **State tracking (state.py)**
 - `StateManager` persists sync state in `.sync-state/<machine-id>.json` files
-- Stores file checksums, sizes, mtimes, and last sync times per machine
+- Stores file checksums and last sync times per machine
 - Tracks deletions with timestamps and user decisions
 - Enables multi-machine awareness by storing separate state per machine ID
 

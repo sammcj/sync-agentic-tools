@@ -291,9 +291,7 @@ def show_deletion_prompt(file_path: str, source: str, dest: str) -> str:
 
     choices = ["d", "s", "v", "k"]
     choice = prompt_user_choice(
-        "[D]elete from {dest} / [S]ync back to {source} / [V]iew / S[k]ip".format(
-            dest=dest, source=source
-        ),
+        f"[D]elete from {dest} / [S]ync back to {source} / [V]iew / S[k]ip",
         choices,
     )
 

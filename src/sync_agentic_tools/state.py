@@ -14,8 +14,6 @@ class FileState:
     """State information for a single file."""
 
     checksum: str
-    size: int
-    mtime: str  # ISO format datetime
     last_synced: str  # ISO format datetime
 
 
@@ -45,7 +43,16 @@ class SyncState:
     @classmethod
     def from_dict(cls, data: dict) -> SyncState:
         """Create from dictionary."""
-        files = {path: FileState(**file_data) for path, file_data in data.get("files", {}).items()}
+        # Handle backwards compatibility - filter out old fields (size, mtime)
+        files = {}
+        for path, file_data in data.get("files", {}).items():
+            # Only keep fields that FileState accepts
+            filtered_data = {
+                "checksum": file_data["checksum"],
+                "last_synced": file_data["last_synced"],
+            }
+            files[path] = FileState(**filtered_data)
+
         deletions = {
             path: DeletionRecord(**del_data) for path, del_data in data.get("deletions", {}).items()
         }
@@ -71,8 +78,6 @@ class SyncState:
 
         self.files[relative_path] = FileState(
             checksum=metadata.checksum,
-            size=metadata.size,
-            mtime=metadata.mtime.isoformat(),
             last_synced=datetime.now().isoformat(),
         )
 

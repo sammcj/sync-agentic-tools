@@ -13,14 +13,10 @@ class TestFileState:
         """Test creating file state."""
         state = FileState(
             checksum="sha256:abc123",
-            size=1024,
-            mtime="2025-01-01T12:00:00",
             last_synced="2025-01-01T12:00:00",
         )
 
         assert state.checksum == "sha256:abc123"
-        assert state.size == 1024
-        assert state.mtime == "2025-01-01T12:00:00"
         assert state.last_synced == "2025-01-01T12:00:00"
 
 
@@ -82,8 +78,6 @@ class TestSyncState:
             "files": {
                 "test/file.txt": {
                     "checksum": "sha256:abc123",
-                    "size": 100,
-                    "mtime": "2025-01-01T11:00:00",
                     "last_synced": "2025-01-01T12:00:00",
                 }
             },
@@ -103,6 +97,32 @@ class TestSyncState:
         assert state.files["test/file.txt"].checksum == "sha256:abc123"
         assert "test/deleted.txt" in state.deletions
 
+    def test_from_dict_backwards_compatible(self):
+        """Test loading old state format with size and mtime fields."""
+        # Old format state file with size and mtime
+        old_format_data = {
+            "machine_id": "test-12345678",
+            "hostname": "test",
+            "last_sync": "2025-01-01T12:00:00",
+            "files": {
+                "test/file.txt": {
+                    "checksum": "sha256:abc123",
+                    "size": 1024,
+                    "mtime": "2025-01-01T11:00:00",
+                    "last_synced": "2025-01-01T12:00:00",
+                }
+            },
+            "deletions": {},
+        }
+
+        # Should load successfully, ignoring size and mtime
+        state = SyncState.from_dict(old_format_data)
+
+        assert state.machine_id == "test-12345678"
+        assert "test/file.txt" in state.files
+        assert state.files["test/file.txt"].checksum == "sha256:abc123"
+        assert state.files["test/file.txt"].last_synced == "2025-01-01T12:00:00"
+
     def test_update_file(self, tmp_path):
         """Test updating file state."""
         state = SyncState(
@@ -121,7 +141,6 @@ class TestSyncState:
         assert "test_tool/test.txt" in state.files
         file_state = state.files["test_tool/test.txt"]
         assert file_state.checksum == metadata.checksum
-        assert file_state.size == metadata.size
 
     def test_record_deletion(self):
         """Test recording file deletion."""
@@ -148,8 +167,6 @@ class TestSyncState:
 
         state.files["test/file.txt"] = FileState(
             checksum="sha256:abc123",
-            size=100,
-            mtime="2025-01-01T11:00:00",
             last_synced="2025-01-01T12:00:00",
         )
 
@@ -167,8 +184,6 @@ class TestSyncState:
 
         state.files["test/file.txt"] = FileState(
             checksum="sha256:abc123",
-            size=100,
-            mtime="2025-01-01T11:00:00",
             last_synced="2025-01-01T12:00:00",
         )
 
@@ -226,8 +241,6 @@ class TestStateManager:
         # Add some data
         state.files["test/file.txt"] = FileState(
             checksum="sha256:abc123",
-            size=100,
-            mtime="2025-01-01T11:00:00",
             last_synced="2025-01-01T12:00:00",
         )
 
@@ -318,8 +331,6 @@ class TestStateManager:
             "files": {
                 "test/file.txt": {
                     "checksum": "sha256:old",
-                    "size": 100,
-                    "mtime": "2025-01-01T11:00:00",
                     "last_synced": "2025-01-01T12:00:00",
                 }
             },
@@ -336,8 +347,6 @@ class TestStateManager:
             "files": {
                 "test/file.txt": {
                     "checksum": "sha256:new",
-                    "size": 200,
-                    "mtime": "2025-01-01T13:00:00",
                     "last_synced": "2025-01-01T14:00:00",
                 }
             },
@@ -360,8 +369,6 @@ class TestStateManager:
         state = manager.load_state()
         state.files["test/file.txt"] = FileState(
             checksum="sha256:current",
-            size=100,
-            mtime="2025-01-01T15:00:00",
             last_synced="2025-01-01T15:00:00",
         )
         manager.save_state(state)
@@ -375,8 +382,6 @@ class TestStateManager:
             "files": {
                 "test/file.txt": {
                     "checksum": "sha256:other",
-                    "size": 200,
-                    "mtime": "2025-01-01T13:00:00",
                     "last_synced": "2025-01-01T14:00:00",
                 }
             },
