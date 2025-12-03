@@ -32,6 +32,7 @@ exclude_rulesets:
     - "**/*.local.*"         # Exclude all local files
     - "**/temp/**"           # Exclude temp directories
     - "**/*-backup.*"        # Exclude backup files
+    - "**/.git"              # Exclude git directories
 
   private:
     - "skills/private-*/**"  # Exclude private skills

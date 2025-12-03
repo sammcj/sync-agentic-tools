@@ -201,10 +201,26 @@ def find_files(
     result = set()
     for candidate in candidates:
         excluded = False
+        relative_path = candidate.relative_to(base_path)
+
         for exclude_pattern in combined_excludes:
+            # Check if the file itself matches the pattern
             if matches_pattern(candidate, exclude_pattern, base_path):
                 excluded = True
                 break
+
+            # Also check if any parent directory matches the pattern
+            # This ensures that patterns like "**/.git" exclude all files within .git directories
+            for parent in relative_path.parents:
+                if parent != Path("."):  # Skip the root "." parent
+                    parent_path = base_path / parent
+                    if matches_pattern(parent_path, exclude_pattern, base_path):
+                        excluded = True
+                        break
+
+            if excluded:
+                break
+
         if not excluded:
             result.add(candidate)
 

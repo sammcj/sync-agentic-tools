@@ -48,6 +48,11 @@ lint:
 	@echo "Running linting checks..."
 	@. .venv/bin/activate && ruff check src/ tests/ --fix
 
+# Check types
+check-types:
+	@echo "Checking types..."
+	@. .venv/bin/activate && uvx ty check
+
 # Auto-format code
 format:
 	@echo "Formatting code..."
