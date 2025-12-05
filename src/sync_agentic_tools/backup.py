@@ -36,7 +36,7 @@ class BackupManifest:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: dict) -> BackupManifest:
+    def from_dict(cls, data: dict) -> "BackupManifest":
         """Create from dictionary."""
         changes = [BackupChange(**change) for change in data.get("changes", [])]
         return cls(

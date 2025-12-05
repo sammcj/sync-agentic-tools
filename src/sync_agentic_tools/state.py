@@ -41,7 +41,7 @@ class SyncState:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: dict) -> SyncState:
+    def from_dict(cls, data: dict) -> "SyncState":
         """Create from dictionary."""
         # Handle backwards compatibility - filter out old fields (size, mtime)
         files = {}

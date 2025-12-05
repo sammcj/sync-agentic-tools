@@ -18,7 +18,7 @@ class FileMetadata:
     relative_path: str
 
     @classmethod
-    def from_file(cls, file_path: Path, base_path: Path) -> FileMetadata:
+    def from_file(cls, file_path: Path, base_path: Path) -> "FileMetadata":
         """
         Create metadata from a file.
 

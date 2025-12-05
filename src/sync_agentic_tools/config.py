@@ -85,7 +85,7 @@ class Config:
     propagate: list[PropagationRule] = field(default_factory=list)
 
     @classmethod
-    def load(cls, config_path: Path | None = None) -> Config:
+    def load(cls, config_path: Path | None = None) -> "Config":
         """
         Load configuration from YAML file.
 
@@ -105,7 +105,7 @@ class Config:
         if not config_path.exists():
             raise FileNotFoundError(
                 f"Config file not found: {config_path}\n"
-                f"Create one using: sync-agentic-tools --init-config"
+                f"Create one using: sync-agentic-tools init-config"
             )
 
         with open(config_path) as f:
@@ -114,7 +114,7 @@ class Config:
         return cls.from_dict(data)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> Config:
+    def from_dict(cls, data: dict[str, Any]) -> "Config":
         """
         Create Config from dictionary.
 
