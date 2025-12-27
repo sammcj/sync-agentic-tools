@@ -3,12 +3,14 @@
 from pathlib import Path
 
 
-def parse_gitignore(gitignore_path: Path) -> list[str]:
+def parse_gitignore(gitignore_path: Path, add_global_prefix: bool = True) -> list[str]:
     """
     Parse a .gitignore file and return a list of exclude patterns.
 
     Args:
         gitignore_path: Path to .gitignore file
+        add_global_prefix: If True, add **/ prefix for global matching (root gitignore).
+                          If False, return patterns as-is for directory-scoped matching.
 
     Returns:
         List of glob patterns to exclude
@@ -33,7 +35,7 @@ def parse_gitignore(gitignore_path: Path) -> list[str]:
                     continue
 
                 # Convert gitignore pattern to glob pattern
-                pattern = _gitignore_to_glob(line)
+                pattern = _gitignore_to_glob(line, add_global_prefix)
                 if pattern:
                     patterns.append(pattern)
 
@@ -44,12 +46,15 @@ def parse_gitignore(gitignore_path: Path) -> list[str]:
     return patterns
 
 
-def _gitignore_to_glob(pattern: str) -> str:
+def _gitignore_to_glob(pattern: str, add_global_prefix: bool = True) -> str:
     """
     Convert a gitignore pattern to a glob pattern.
 
     Args:
         pattern: Gitignore pattern
+        add_global_prefix: If True, add **/ prefix for patterns that should match
+                          at any directory level. If False, return patterns without
+                          the global prefix (for directory-scoped matching).
 
     Returns:
         Glob pattern compatible with our pattern matching
@@ -67,13 +72,17 @@ def _gitignore_to_glob(pattern: str) -> str:
     if is_directory:
         pattern = pattern.rstrip("/")
         # Match everything inside the directory
-        if is_root_relative:
+        if is_root_relative or not add_global_prefix:
             return f"{pattern}/**"
         else:
             return f"**/{pattern}/**"
 
     # If root-relative, don't add ** prefix
     if is_root_relative:
+        return pattern
+
+    # If not adding global prefix, return as-is (will be prefixed with directory later)
+    if not add_global_prefix:
         return pattern
 
     # Handle patterns with directory separators
@@ -100,10 +109,10 @@ def collect_gitignore_patterns(base_path: Path, respect_nested: bool = True) -> 
     """
     patterns = []
 
-    # Read root .gitignore
+    # Read root .gitignore - these patterns apply globally (with **/ prefix)
     root_gitignore = base_path / ".gitignore"
     if root_gitignore.exists():
-        patterns.extend(parse_gitignore(root_gitignore))
+        patterns.extend(parse_gitignore(root_gitignore, add_global_prefix=True))
 
     # Read nested .gitignore files if requested
     if respect_nested and base_path.is_dir():
@@ -112,21 +121,24 @@ def collect_gitignore_patterns(base_path: Path, respect_nested: bool = True) -> 
             if gitignore_path == root_gitignore:
                 continue
 
-            # Parse and add patterns
-            nested_patterns = parse_gitignore(gitignore_path)
+            # Parse patterns WITHOUT global prefix - we'll scope them to the directory
+            nested_patterns = parse_gitignore(gitignore_path, add_global_prefix=False)
 
             # Make patterns relative to the base_path
             # (gitignore patterns are relative to their containing directory)
             gitignore_dir = gitignore_path.parent
             try:
                 rel_dir = gitignore_dir.relative_to(base_path)
-                # Prefix patterns with the relative directory
+                # Prefix patterns with the relative directory to scope them
                 for pattern in nested_patterns:
-                    # Skip patterns that already have ** (they're global)
-                    if pattern.startswith("**/"):
-                        patterns.append(pattern)
-                    else:
+                    # For patterns that contain **, they're meant to match recursively
+                    # within the subdirectory, so prefix with the directory
+                    if "**" in pattern:
                         patterns.append(f"{rel_dir}/{pattern}")
+                    else:
+                        # Simple patterns like "settings.json" or "*.log" should
+                        # match recursively within the subdirectory
+                        patterns.append(f"{rel_dir}/**/{pattern}")
             except ValueError:
                 # gitignore is not under base_path, skip it
                 continue
