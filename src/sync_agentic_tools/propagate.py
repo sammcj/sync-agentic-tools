@@ -58,6 +58,60 @@ def apply_remove_xml_sections_transform(content: str, sections: list[str]) -> st
     return result
 
 
+def apply_remove_markdown_sections_transform(content: str, sections: list[str]) -> str:
+    """
+    Remove sections identified by markdown headings.
+
+    Each section name is matched against heading text (e.g. "Sub-agent Coordination"
+    matches "#### Sub-agent Coordination"). Removes from the heading through to just
+    before the next heading at the same or higher level, or end of file.
+
+    Headings inside fenced code blocks are ignored.
+    """
+    result = content
+
+    for section in sections:
+        heading_pattern = re.compile(
+            rf"^(#{{1,6}})\s+{re.escape(section)}\s*$",
+            re.MULTILINE,
+        )
+
+        match = heading_pattern.search(result)
+        if not match:
+            continue
+
+        heading_level = len(match.group(1))
+        section_start = match.start()
+
+        # Find the next heading at the same or higher level, skipping code blocks
+        next_heading_re = re.compile(
+            rf"^#{{1,{heading_level}}}\s+\S",
+            re.MULTILINE,
+        )
+        in_code_block = False
+        section_end = len(result)
+        for line_match in re.finditer(r"^.*$", result[match.end():], re.MULTILINE):
+            line = line_match.group()
+            if line.startswith("```"):
+                in_code_block = not in_code_block
+                continue
+            if in_code_block:
+                continue
+            if next_heading_re.match(line):
+                section_end = match.end() + line_match.start()
+                break
+
+        # Remove the section, normalising surrounding blank lines
+        before = result[:section_start].rstrip("\n")
+        after = result[section_end:]
+        if before:
+            result = before + "\n\n" + after.lstrip("\n")
+        else:
+            result = after.lstrip("\n")
+
+    return result
+
+
 def apply_transform(content: str, transform: dict[str, Any]) -> str:
     """Apply a single transformation to content."""
     transform_type = transform.get("type")
@@ -73,6 +127,12 @@ def apply_transform(content: str, transform: dict[str, Any]) -> str:
         if not sections:
             raise ValueError("remove_xml_sections transform requires 'sections' parameter")
         return apply_remove_xml_sections_transform(content, sections)
+
+    elif transform_type == "remove_markdown_sections":
+        sections = transform.get("sections")
+        if not sections:
+            raise ValueError("remove_markdown_sections transform requires 'sections' parameter")
+        return apply_remove_markdown_sections_transform(content, sections)
 
     else:
         raise ValueError(f"Unknown transform type: {transform_type}")
