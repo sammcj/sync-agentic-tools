@@ -1,34 +1,95 @@
 """Special file handling for agentic-sync."""
 
 import json
+import re
 from pathlib import Path
+
+# Pattern to strip single-line (//) and multi-line (/* */) comments from JSONC,
+# while preserving strings that contain comment-like sequences.
+_JSONC_COMMENT_RE = re.compile(
+    r'"(?:[^"\\]|\\.)*"'  # double-quoted string (skip)
+    r"|'(?:[^'\\]|\\.)*'"  # single-quoted string (skip)
+    r"|//[^\n]*"  # single-line comment
+    r"|/\*[\s\S]*?\*/",  # multi-line comment
+)
+
+# Trailing commas before closing } or ]
+_TRAILING_COMMA_RE = re.compile(r",\s*([}\]])")
+
+
+def _parse_jsonc(text: str) -> dict:
+    """Parse JSONC (JSON with Comments) text into a dict.
+
+    Strips // and /* */ comments and trailing commas before delegating to
+    the stdlib json parser. Safe to call on plain JSON too.
+    """
+    stripped = _JSONC_COMMENT_RE.sub(
+        lambda m: m.group(0) if m.group(0)[0] in ('"', "'") else "", text
+    )
+    stripped = _TRAILING_COMMA_RE.sub(r"\1", stripped)
+    return json.loads(stripped)
+
+
+def _load_json_or_jsonc(filepath: Path) -> dict:
+    """Read and parse a JSON or JSONC file."""
+    with open(filepath) as f:
+        text = f.read()
+    if filepath.suffix == ".jsonc":
+        return _parse_jsonc(text)
+    return json.loads(text)
+
+
+def _get_nested(data: dict, dotted_key: str):
+    """Traverse *data* following a dot-separated key path.
+
+    Returns (value, True) if the path exists, (None, False) otherwise.
+    """
+    parts = dotted_key.split(".")
+    current = data
+    for part in parts:
+        if isinstance(current, dict) and part in current:
+            current = current[part]
+        else:
+            return None, False
+    return current, True
+
+
+def _set_nested(data: dict, dotted_key: str, value) -> None:
+    """Set a value in *data* at the location described by a dot-separated key,
+    creating intermediate dicts as needed."""
+    parts = dotted_key.split(".")
+    current = data
+    for part in parts[:-1]:
+        current = current.setdefault(part, {})
+    current[parts[-1]] = value
 
 
 def extract_json_keys(
     source_file: Path, include_keys: list[str], exclude_patterns: list[str] | None = None
 ) -> str:
     """
-    Extract specific keys from a JSON file.
+    Extract specific keys from a JSON/JSONC file.
+
+    Keys may be top-level (e.g. ``"plugin"``) or dot-separated paths into
+    nested objects (e.g. ``"provider.llama_cpp.npm"``).
 
     Args:
-        source_file: Path to source JSON file
-        include_keys: List of top-level keys to include
+        source_file: Path to source JSON/JSONC file
+        include_keys: Keys or dotted paths to include
         exclude_patterns: List of patterns to exclude (not yet implemented)
 
     Returns:
         JSON string with only included keys
     """
     try:
-        with open(source_file) as f:
-            data = json.load(f)
+        data = _load_json_or_jsonc(source_file)
 
-        # Extract only specified keys
-        filtered_data = {}
+        filtered_data: dict = {}
         for key in include_keys:
-            if key in data:
-                filtered_data[key] = data[key]
+            value, found = _get_nested(data, key)
+            if found:
+                _set_nested(filtered_data, key, value)
 
-        # Convert back to JSON with nice formatting
         return json.dumps(filtered_data, indent=2)
 
     except (json.JSONDecodeError, OSError) as e:
@@ -47,18 +108,18 @@ def merge_json_keys(dest_file: Path, extracted_content: str, include_keys: list[
     try:
         # Load existing destination file if it exists
         if dest_file.exists():
-            with open(dest_file) as f:
-                dest_data = json.load(f)
+            dest_data = _load_json_or_jsonc(dest_file)
         else:
             dest_data = {}
 
         # Load extracted data
         extracted_data = json.loads(extracted_content)
 
-        # Merge: update only the specified keys
+        # Merge: update only the specified keys (supports dotted paths)
         for key in include_keys:
-            if key in extracted_data:
-                dest_data[key] = extracted_data[key]
+            value, found = _get_nested(extracted_data, key)
+            if found:
+                _set_nested(dest_data, key, value)
 
         # Write back to destination
         dest_file.parent.mkdir(parents=True, exist_ok=True)
