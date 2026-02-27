@@ -39,29 +39,24 @@ def _load_json_or_jsonc(filepath: Path) -> dict:
     return json.loads(text)
 
 
-def _get_nested(data: dict, dotted_key: str):
-    """Traverse *data* following a dot-separated key path.
+def _filter_dict_by_paths(data: dict, include_paths: set[str], traversal_paths: set[str],
+                          prefix: str = "") -> dict:
+    """Recursively filter *data* to only include keys matching *include_paths*,
+    preserving the original key ordering at every nesting level.
 
-    Returns (value, True) if the path exists, (None, False) otherwise.
+    *traversal_paths* contains ancestor prefixes that need to be traversed
+    (e.g. ``"provider"`` for include path ``"provider.llama_cpp.npm"``).
     """
-    parts = dotted_key.split(".")
-    current = data
-    for part in parts:
-        if isinstance(current, dict) and part in current:
-            current = current[part]
-        else:
-            return None, False
-    return current, True
-
-
-def _set_nested(data: dict, dotted_key: str, value) -> None:
-    """Set a value in *data* at the location described by a dot-separated key,
-    creating intermediate dicts as needed."""
-    parts = dotted_key.split(".")
-    current = data
-    for part in parts[:-1]:
-        current = current.setdefault(part, {})
-    current[parts[-1]] = value
+    result: dict = {}
+    for key, value in data.items():
+        full_path = f"{prefix}.{key}" if prefix else key
+        if full_path in include_paths:
+            result[key] = value
+        elif full_path in traversal_paths and isinstance(value, dict):
+            filtered = _filter_dict_by_paths(value, include_paths, traversal_paths, full_path)
+            if filtered:
+                result[key] = filtered
+    return result
 
 
 def extract_json_keys(
@@ -72,6 +67,9 @@ def extract_json_keys(
 
     Keys may be top-level (e.g. ``"plugin"``) or dot-separated paths into
     nested objects (e.g. ``"provider.llama_cpp.npm"``).
+
+    The output preserves the key ordering of the source file at every
+    nesting level.
 
     Args:
         source_file: Path to source JSON/JSONC file
@@ -84,11 +82,15 @@ def extract_json_keys(
     try:
         data = _load_json_or_jsonc(source_file)
 
-        filtered_data: dict = {}
-        for key in include_keys:
-            value, found = _get_nested(data, key)
-            if found:
-                _set_nested(filtered_data, key, value)
+        include_paths = set(include_keys)
+        # Pre-compute ancestor paths that need traversal
+        traversal_paths: set[str] = set()
+        for path in include_paths:
+            parts = path.split(".")
+            for i in range(len(parts) - 1):
+                traversal_paths.add(".".join(parts[: i + 1]))
+
+        filtered_data = _filter_dict_by_paths(data, include_paths, traversal_paths)
 
         return json.dumps(filtered_data, indent=2)
 
@@ -96,35 +98,55 @@ def extract_json_keys(
         raise ValueError(f"Failed to extract keys from {source_file}: {e}")
 
 
-def merge_json_keys(dest_file: Path, extracted_content: str, include_keys: list[str]) -> None:
+def _merge_dicts_source_order(source: dict, dest: dict) -> dict:
+    """Merge *dest* into *source*, with source providing both ordering and values.
+
+    Source keys come first in source order.  For shared dict-valued keys
+    the merge recurses so that dest-only nested keys are preserved.
+    Dest-only top-level keys are appended in their original dest order.
     """
-    Merge extracted JSON keys into destination file.
+    result: dict = {}
+    # First pass: source keys in source order (source values win)
+    for key in source:
+        if key in dest and isinstance(source[key], dict) and isinstance(dest[key], dict):
+            result[key] = _merge_dicts_source_order(source[key], dest[key])
+        else:
+            result[key] = source[key]
+    # Second pass: dest-only keys appended in dest order
+    for key in dest:
+        if key not in result:
+            result[key] = dest[key]
+    return result
+
+
+def merge_json_keys(dest_file: Path, extracted_content: str) -> None:
+    """
+    Merge extracted JSON keys into destination file, preserving key ordering.
+
+    When the destination already exists, its key ordering is kept for
+    existing keys and new keys are appended in source order.  When it
+    doesn't exist yet, source ordering is used directly.
 
     Args:
         dest_file: Path to destination JSON file
         extracted_content: JSON string with keys to merge
-        include_keys: List of keys that were extracted
     """
     try:
-        # Load existing destination file if it exists
-        if dest_file.exists():
-            dest_data = _load_json_or_jsonc(dest_file)
-        else:
-            dest_data = {}
-
-        # Load extracted data
         extracted_data = json.loads(extracted_content)
 
-        # Merge: update only the specified keys (supports dotted paths)
-        for key in include_keys:
-            value, found = _get_nested(extracted_data, key)
-            if found:
-                _set_nested(dest_data, key, value)
+        if dest_file.exists():
+            dest_data = _load_json_or_jsonc(dest_file)
+            # Source ordering wins; dest-only keys are appended
+            merged = _merge_dicts_source_order(extracted_data, dest_data)
+        else:
+            # No destination yet -- use extracted data directly so source
+            # key ordering is preserved exactly.
+            merged = extracted_data
 
         # Write back to destination
         dest_file.parent.mkdir(parents=True, exist_ok=True)
         with open(dest_file, "w") as f:
-            json.dump(dest_data, f, indent=2)
+            json.dump(merged, f, indent=2)
             f.write("\n")  # Add trailing newline
 
     except (json.JSONDecodeError, OSError) as e:
@@ -159,7 +181,7 @@ def process_special_file(
         extracted_content = extract_json_keys(source_file, include_keys, exclude_patterns)
 
         # Merge into destination
-        merge_json_keys(dest_file, extracted_content, include_keys)
+        merge_json_keys(dest_file, extracted_content)
 
         return True
     else:

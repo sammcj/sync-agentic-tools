@@ -1,5 +1,6 @@
 """Core sync logic for agentic-sync."""
 
+import json
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -82,7 +83,8 @@ class SyncEngine:
         if filename in tool.special_handling:
             handling = tool.special_handling[filename]
 
-            # Extract the relevant parts from both files
+            # Extract the relevant parts from both files and compare the
+            # parsed dicts so key ordering differences are ignored.
             try:
                 source_extracted = extract_json_keys(
                     source_path, handling.include_keys, handling.exclude_patterns
@@ -91,13 +93,7 @@ class SyncEngine:
                     target_path, handling.include_keys, handling.exclude_patterns
                 )
 
-                # Compare checksums of extracted content
-                import hashlib
-
-                source_hash = hashlib.sha256(source_extracted.encode()).hexdigest()
-                target_hash = hashlib.sha256(target_extracted.encode()).hexdigest()
-
-                return source_hash == target_hash
+                return json.loads(source_extracted) == json.loads(target_extracted)
             except Exception:
                 # If extraction fails, fall back to normal comparison
                 return files_are_identical(source_path, target_path)
