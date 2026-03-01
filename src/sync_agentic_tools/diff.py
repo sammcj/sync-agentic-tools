@@ -102,3 +102,11 @@ def count_diff_lines(file1: Path, file2: Path) -> DiffStats:
     """
     _, stats = generate_unified_diff(file1, file2)
     return stats
+
+
+def count_diff_lines_from_strings(
+    text1: str, text2: str, name1: str = "original", name2: str = "modified"
+) -> DiffStats:
+    """Count additions/deletions between two strings without generating full diff."""
+    _, stats = generate_diff_between_strings(text1, text2, name1, name2)
+    return stats

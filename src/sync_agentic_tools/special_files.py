@@ -82,14 +82,7 @@ def extract_json_keys(
     try:
         data = _load_json_or_jsonc(source_file)
 
-        include_paths = set(include_keys)
-        # Pre-compute ancestor paths that need traversal
-        traversal_paths: set[str] = set()
-        for path in include_paths:
-            parts = path.split(".")
-            for i in range(len(parts) - 1):
-                traversal_paths.add(".".join(parts[: i + 1]))
-
+        include_paths, traversal_paths = _compute_traversal_paths(include_keys)
         filtered_data = _filter_dict_by_paths(data, include_paths, traversal_paths)
 
         return json.dumps(filtered_data, indent=2)
@@ -98,18 +91,39 @@ def extract_json_keys(
         raise ValueError(f"Failed to extract keys from {source_file}: {e}")
 
 
-def _merge_dicts_source_order(source: dict, dest: dict) -> dict:
+def _merge_dicts_source_order(
+    source: dict,
+    dest: dict,
+    include_paths: set[str] | None = None,
+    traversal_paths: set[str] | None = None,
+    prefix: str = "",
+) -> dict:
     """Merge *dest* into *source*, with source providing both ordering and values.
 
-    Source keys come first in source order.  For shared dict-valued keys
-    the merge recurses so that dest-only nested keys are preserved.
-    Dest-only top-level keys are appended in their original dest order.
+    Source keys come first in source order.  Dest-only keys are appended
+    in their original dest order.
+
+    When *include_paths* and *traversal_paths* are provided, the merge
+    distinguishes between:
+    - **include paths**: the source value replaces the dest value entirely
+      (no recursive merge), because the source is authoritative for these.
+    - **traversal paths**: containers that are recursed into so that
+      dest-only sibling keys are preserved.
+    - **other paths**: recursed into by default for backward compatibility.
     """
     result: dict = {}
     # First pass: source keys in source order (source values win)
     for key in source:
+        full_path = f"{prefix}.{key}" if prefix else key
         if key in dest and isinstance(source[key], dict) and isinstance(dest[key], dict):
-            result[key] = _merge_dicts_source_order(source[key], dest[key])
+            # If this is an explicit include path, replace entirely --
+            # the source is authoritative for these keys.
+            if include_paths and full_path in include_paths:
+                result[key] = source[key]
+            else:
+                result[key] = _merge_dicts_source_order(
+                    source[key], dest[key], include_paths, traversal_paths, full_path
+                )
         else:
             result[key] = source[key]
     # Second pass: dest-only keys appended in dest order
@@ -119,25 +133,47 @@ def _merge_dicts_source_order(source: dict, dest: dict) -> dict:
     return result
 
 
-def merge_json_keys(dest_file: Path, extracted_content: str) -> None:
+def _compute_traversal_paths(include_keys: list[str]) -> tuple[set[str], set[str]]:
+    """Compute include paths and traversal paths from a list of include keys."""
+    include_paths = set(include_keys)
+    traversal_paths: set[str] = set()
+    for path in include_paths:
+        parts = path.split(".")
+        for i in range(len(parts) - 1):
+            traversal_paths.add(".".join(parts[: i + 1]))
+    return include_paths, traversal_paths
+
+
+def merge_json_keys(
+    dest_file: Path, extracted_content: str, include_keys: list[str] | None = None
+) -> None:
     """
     Merge extracted JSON keys into destination file, preserving key ordering.
 
     When the destination already exists, its key ordering is kept for
-    existing keys and new keys are appended in source order.  When it
-    doesn't exist yet, source ordering is used directly.
+    existing keys and new keys are appended in source order.  Keys that
+    are in *include_keys* replace the destination value entirely (the
+    source is authoritative); container keys are merged recursively so
+    that dest-only sibling keys are preserved.
 
     Args:
         dest_file: Path to destination JSON file
         extracted_content: JSON string with keys to merge
+        include_keys: The original include key paths, used to determine
+            which keys should replace vs merge recursively.
     """
     try:
         extracted_data = json.loads(extracted_content)
 
         if dest_file.exists():
             dest_data = _load_json_or_jsonc(dest_file)
-            # Source ordering wins; dest-only keys are appended
-            merged = _merge_dicts_source_order(extracted_data, dest_data)
+            if include_keys:
+                inc_paths, trav_paths = _compute_traversal_paths(include_keys)
+            else:
+                inc_paths, trav_paths = None, None
+            merged = _merge_dicts_source_order(
+                extracted_data, dest_data, inc_paths, trav_paths
+            )
         else:
             # No destination yet -- use extracted data directly so source
             # key ordering is preserved exactly.
@@ -180,8 +216,9 @@ def process_special_file(
         # Extract keys from source
         extracted_content = extract_json_keys(source_file, include_keys, exclude_patterns)
 
-        # Merge into destination
-        merge_json_keys(dest_file, extracted_content)
+        # Merge into destination, passing include_keys so the merge
+        # knows which keys to replace entirely vs merge recursively.
+        merge_json_keys(dest_file, extracted_content, include_keys)
 
         return True
     else:

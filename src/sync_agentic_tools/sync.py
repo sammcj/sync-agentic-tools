@@ -7,7 +7,7 @@ from pathlib import Path
 
 from .backup import BackupManager
 from .config import Config, ToolConfig
-from .diff import count_diff_lines, generate_unified_diff
+from .diff import count_diff_lines, count_diff_lines_from_strings, generate_diff_between_strings, generate_unified_diff
 from .files import FileMetadata, files_are_identical, safe_copy_file
 from .special_files import extract_json_keys, process_special_file
 from .state import StateManager, SyncState
@@ -67,6 +67,25 @@ class SyncEngine:
             if handling.include_keys:
                 return handling.include_keys
         return None
+
+    def _extract_special_handling_content(
+        self, tool: ToolConfig, filepath: Path
+    ) -> str | None:
+        """Extract filtered content for a file with special_handling.
+
+        Returns the JSON string containing only the included keys, or None
+        if the file has no special handling configured.
+        """
+        filename = filepath.name
+        if filename not in tool.special_handling:
+            return None
+        handling = tool.special_handling[filename]
+        if not handling.include_keys:
+            return None
+        try:
+            return extract_json_keys(filepath, handling.include_keys, handling.exclude_patterns)
+        except Exception:
+            return None
 
     def _files_are_identical_with_special_handling(
         self, tool: ToolConfig, source_path: Path, target_path: Path
@@ -317,16 +336,25 @@ class SyncEngine:
             if not self._files_are_identical_with_special_handling(
                 plan.tool, source_path, target_path
             ):
-                # Different content - check if target is newer
-                source_mtime = source_path.stat().st_mtime
-                target_mtime = target_path.stat().st_mtime
-
-                # If target is newer, suggest reverse sync instead of pushing
-                if target_mtime > source_mtime:
-                    plan.reverse_suggestions.append((source_path, target_path))
-                else:
-                    # Push source to target
+                # For files with special_handling (partial sync), mtime
+                # reflects the entire file including sections we don't sync.
+                # The target can appear "newer" due to edits in unsynced
+                # sections, so skip the mtime check -- source is authoritative
+                # for its configured keys.
+                has_special = source_path.name in plan.tool.special_handling
+                if has_special:
                     plan.files_to_copy.append((source_path, target_path))
+                else:
+                    # Different content - check if target is newer
+                    source_mtime = source_path.stat().st_mtime
+                    target_mtime = target_path.stat().st_mtime
+
+                    # If target is newer, suggest reverse sync instead of pushing
+                    if target_mtime > source_mtime:
+                        plan.reverse_suggestions.append((source_path, target_path))
+                    else:
+                        # Push source to target
+                        plan.files_to_copy.append((source_path, target_path))
         elif not source_path and target_path:
             # File deleted from source or orphaned in target
             if file_state:  # Was previously synced - deletion candidate
@@ -452,8 +480,16 @@ class SyncEngine:
                     choice = show_reverse_sync_prompt(relpath, source_info, target_info, special_keys)
 
                     if choice == "diff":
-                        # Show diff and ask again
-                        diff_lines, _ = generate_unified_diff(source_path, target_path)
+                        # For special_handling files, diff only extracted keys
+                        # to avoid exposing unsynced content (e.g. secrets).
+                        src_ext = self._extract_special_handling_content(tool, source_path)
+                        tgt_ext = self._extract_special_handling_content(tool, target_path)
+                        if src_ext is not None and tgt_ext is not None:
+                            diff_lines, _ = generate_diff_between_strings(
+                                src_ext, tgt_ext, str(source_path), str(target_path)
+                            )
+                        else:
+                            diff_lines, _ = generate_unified_diff(source_path, target_path)
                         from .ui import show_diff
 
                         show_diff(relpath, diff_lines, "source", "target")
@@ -495,8 +531,15 @@ class SyncEngine:
                         choice = show_conflict_resolution_prompt(relpath, source_info, target_info, special_keys)
 
                     if choice == "diff":
-                        # Show diff and ask again
-                        diff_lines, _ = generate_unified_diff(source_path, target_path)
+                        # For special_handling files, diff only extracted keys
+                        src_ext = self._extract_special_handling_content(tool, source_path)
+                        tgt_ext = self._extract_special_handling_content(tool, target_path)
+                        if src_ext is not None and tgt_ext is not None:
+                            diff_lines, _ = generate_diff_between_strings(
+                                src_ext, tgt_ext, str(source_path), str(target_path)
+                            )
+                        else:
+                            diff_lines, _ = generate_unified_diff(source_path, target_path)
                         from .ui import show_diff
 
                         show_diff(relpath, diff_lines, "source", "target")
@@ -800,7 +843,16 @@ class SyncEngine:
             # Determine change type
             if dest.exists():
                 change_type = ChangeType.MODIFIED
-                diff_stats = count_diff_lines(source, dest)
+                # For special_handling files, diff only the extracted keys
+                # to avoid exposing unsynced content (e.g. secrets).
+                source_extracted = self._extract_special_handling_content(plan.tool, source)
+                dest_extracted = self._extract_special_handling_content(plan.tool, dest)
+                if source_extracted is not None and dest_extracted is not None:
+                    diff_stats = count_diff_lines_from_strings(
+                        source_extracted, dest_extracted, str(source), str(dest)
+                    )
+                else:
+                    diff_stats = count_diff_lines(source, dest)
             else:
                 change_type = ChangeType.NEW
                 diff_stats = None
@@ -824,7 +876,15 @@ class SyncEngine:
         for source, target in plan.reverse_suggestions:
             relpath = str(source.relative_to(plan.tool.source))
             special_keys = self._get_special_handling_keys(plan.tool, source.name)
-            diff_stats = count_diff_lines(source, target)
+            # For special_handling files, diff only extracted keys
+            source_extracted = self._extract_special_handling_content(plan.tool, source)
+            target_extracted = self._extract_special_handling_content(plan.tool, target)
+            if source_extracted is not None and target_extracted is not None:
+                diff_stats = count_diff_lines_from_strings(
+                    source_extracted, target_extracted, str(source), str(target)
+                )
+            else:
+                diff_stats = count_diff_lines(source, target)
             changes.append(
                 FileChange(
                     relpath,
