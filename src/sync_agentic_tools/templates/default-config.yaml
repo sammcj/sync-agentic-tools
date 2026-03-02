@@ -1,4 +1,7 @@
-# ~/.agentic-sync.yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/sammcj/sync-agentic-tools/main/schema/sync-agentic-tools.schema.json
+# vim: set ft=yaml:
+
+# ~/.sync-agentic-tools.yaml
 settings:
   # Backup settings
   backup_retention_days: 90          # Keep backups for 90 days

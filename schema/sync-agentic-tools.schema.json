@@ -1,0 +1,385 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/sammcj/sync-agentic-tools/main/schema/sync-agentic-tools.schema.json",
+  "title": "sync-agentic-tools configuration",
+  "description": "Configuration file for sync-agentic-tools, a synchronisation tool for agentic coding tool configurations.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "settings": {
+      "description": "Global settings for sync operations.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "backup_retention_days": {
+          "description": "Number of days to retain backups.",
+          "type": "integer",
+          "default": 30,
+          "minimum": 1
+        },
+        "backup_retention_count": {
+          "description": "Maximum number of backups to retain.",
+          "type": "integer",
+          "default": 30,
+          "minimum": 1
+        },
+        "auto_cleanup_backups": {
+          "description": "Automatically clean old backups based on retention settings.",
+          "type": "boolean",
+          "default": true
+        },
+        "compress_old_backups": {
+          "description": "Compress backups older than 7 days.",
+          "type": "boolean",
+          "default": true
+        },
+        "follow_symlinks": {
+          "description": "Follow symbolic links when scanning directories.",
+          "type": "boolean",
+          "default": false
+        },
+        "respect_gitignore": {
+          "description": "Automatically exclude files matched by .gitignore.",
+          "type": "boolean",
+          "default": true
+        },
+        "confirm_destructive_source": {
+          "description": "Prompt for confirmation before overwriting source files.",
+          "type": "boolean",
+          "default": true
+        },
+        "confirm_destructive_target": {
+          "description": "Prompt for confirmation before overwriting target files.",
+          "type": "boolean",
+          "default": false
+        },
+        "show_diff_threshold": {
+          "description": "Show diff for files larger than this many lines.",
+          "type": "integer",
+          "default": 100,
+          "minimum": 0
+        },
+        "detect_renames": {
+          "description": "Detect when files have been renamed.",
+          "type": "boolean",
+          "default": true
+        },
+        "rename_similarity_threshold": {
+          "description": "Similarity threshold for rename detection (0.0 to 1.0). 1.0 requires exact content match.",
+          "type": "number",
+          "default": 1.0,
+          "minimum": 0.0,
+          "maximum": 1.0
+        }
+      }
+    },
+    "exclude_rulesets": {
+      "description": "Reusable sets of exclude glob patterns that tools can reference by name.",
+      "type": "object",
+      "additionalProperties": {
+        "description": "A named list of glob patterns to exclude.",
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "tools": {
+      "description": "Per-tool configuration. Each key is the tool name.",
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/toolConfig"
+      },
+      "minProperties": 1
+    },
+    "propagate": {
+      "description": "Rules for copying files between tools with optional transformations.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/propagationRule"
+      }
+    }
+  },
+  "required": [
+    "tools"
+  ],
+  "$defs": {
+    "toolConfig": {
+      "description": "Configuration for a single tool.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "target"
+      ],
+      "properties": {
+        "enabled": {
+          "description": "Whether this tool is enabled for sync.",
+          "type": "boolean",
+          "default": true
+        },
+        "source": {
+          "description": "Source directory path (supports ~ for home directory).",
+          "type": "string",
+          "examples": [
+            "~/.claude",
+            "~/Documents/Cline"
+          ]
+        },
+        "target": {
+          "description": "Target directory path (supports ~ for home directory).",
+          "type": "string",
+          "examples": [
+            "~/git/agentic-coding/Claude"
+          ]
+        },
+        "include": {
+          "description": "Glob patterns for files to include in sync.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "examples": [
+            [
+              "CLAUDE.md",
+              "skills/**",
+              "commands/**"
+            ]
+          ]
+        },
+        "exclude": {
+          "description": "Glob patterns for files to exclude from sync. Merged with patterns from exclude_rulesets.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "exclude_rulesets": {
+          "description": "Names of exclude rulesets to apply (defined in top-level exclude_rulesets).",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "special_handling": {
+          "description": "File-specific extraction rules (e.g. sync only certain JSON keys).",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/specialHandling"
+          }
+        }
+      }
+    },
+    "specialHandling": {
+      "description": "Special handling rules for a specific file.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode"
+      ],
+      "properties": {
+        "mode": {
+          "description": "Handling mode.",
+          "type": "string",
+          "enum": [
+            "extract_keys"
+          ]
+        },
+        "include_keys": {
+          "description": "JSON keys to extract from the file.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "exclude_patterns": {
+          "description": "Patterns to exclude within the special handling.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "propagationRule": {
+      "description": "A rule for copying files between tools. Specify either source_tool + source_file (tool-relative) or source_path (absolute).",
+      "type": "object",
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "required": [
+            "source_tool",
+            "source_file"
+          ]
+        },
+        {
+          "required": [
+            "source_path"
+          ]
+        }
+      ],
+      "properties": {
+        "source_tool": {
+          "description": "Name of the source tool (must be defined in tools section).",
+          "type": "string"
+        },
+        "source_file": {
+          "description": "File path relative to the source tool's target directory.",
+          "type": "string"
+        },
+        "source_path": {
+          "description": "Absolute file or directory path (supports ~). Use for source-to-source copies without tool definitions.",
+          "type": "string"
+        },
+        "exclude": {
+          "description": "Glob patterns to exclude when propagating directories.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "targets": {
+          "description": "Destination targets for this propagation rule.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/propagationTarget"
+          },
+          "minItems": 1
+        }
+      }
+    },
+    "propagationTarget": {
+      "description": "A propagation destination. Specify either tool + target_file (tool-relative) or dest_path (absolute).",
+      "type": "object",
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "required": [
+            "tool",
+            "target_file"
+          ]
+        },
+        {
+          "required": [
+            "dest_path"
+          ]
+        }
+      ],
+      "properties": {
+        "tool": {
+          "description": "Name of the destination tool (must be defined in tools section).",
+          "type": "string"
+        },
+        "target_file": {
+          "description": "File path relative to the destination tool's target directory.",
+          "type": "string"
+        },
+        "dest_path": {
+          "description": "Absolute destination path (supports ~).",
+          "type": "string"
+        },
+        "file_pattern": {
+          "description": "Glob pattern to match files within a directory source.",
+          "type": "string"
+        },
+        "transforms": {
+          "description": "Transformations to apply to the content after copying.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/transform"
+          }
+        }
+      },
+      "examples": [
+        {
+          "tool": "cline",
+          "target_file": "Rules/CLINE_RULES.md",
+          "transforms": [
+            {
+              "type": "sed",
+              "pattern": "s/Claude/Cline/g"
+            }
+          ]
+        },
+        {
+          "dest_path": "~/.gemini/GEMINI.md"
+        }
+      ]
+    },
+    "transform": {
+      "description": "A content transformation to apply during propagation.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "description": "The type of transformation.",
+          "type": "string",
+          "enum": [
+            "sed",
+            "remove_xml_sections",
+            "remove_markdown_sections"
+          ]
+        },
+        "pattern": {
+          "description": "A sed-style substitution pattern (e.g. 's/old/new/g'). Required when type is 'sed'.",
+          "type": "string"
+        },
+        "sections": {
+          "description": "Section names to remove. For 'remove_xml_sections': XML tag names. For 'remove_markdown_sections': heading text.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "sed"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "pattern"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "remove_xml_sections"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "sections"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "remove_markdown_sections"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "sections"
+            ]
+          }
+        }
+      ]
+    }
+  }
+}
