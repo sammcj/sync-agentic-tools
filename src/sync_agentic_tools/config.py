@@ -25,7 +25,7 @@ class Settings:
     respect_gitignore: bool = True
     confirm_destructive_source: bool = True
     confirm_destructive_target: bool = False
-    show_diff_threshold: int = 100
+    show_diff_threshold: int = 20
     detect_renames: bool = True
     rename_similarity_threshold: float = 1.0
 

@@ -126,9 +126,13 @@ def _merge_dicts_source_order(
                 )
         else:
             result[key] = source[key]
-    # Second pass: dest-only keys appended in dest order
+    # Second pass: dest-only keys appended in dest order, but skip
+    # include keys that the source doesn't have (source is authoritative).
     for key in dest:
         if key not in result:
+            full_path = f"{prefix}.{key}" if prefix else key
+            if include_paths and full_path in include_paths:
+                continue
             result[key] = dest[key]
     return result
 

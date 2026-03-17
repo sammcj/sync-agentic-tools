@@ -41,7 +41,7 @@ def generate_unified_diff(
     lines2 = read_file_lines(file2)
 
     # Generate unified diff
-    diff = list(
+    raw = list(
         difflib.unified_diff(
             lines1,
             lines2,
@@ -51,6 +51,9 @@ def generate_unified_diff(
             n=context_lines,
         )
     )
+
+    # Strip trailing newlines left over from input lines
+    diff = [line.rstrip("\n") for line in raw]
 
     # Calculate stats
     additions = sum(1 for line in diff if line.startswith("+") and not line.startswith("+++"))
@@ -76,8 +79,8 @@ def generate_diff_between_strings(
     Returns:
         Tuple of (diff lines, diff stats)
     """
-    lines1 = text1.splitlines(keepends=True)
-    lines2 = text2.splitlines(keepends=True)
+    lines1 = text1.splitlines()
+    lines2 = text2.splitlines()
 
     diff = list(difflib.unified_diff(lines1, lines2, fromfile=name1, tofile=name2, lineterm=""))
 

@@ -27,7 +27,7 @@ class TestSettings:
         assert settings.respect_gitignore is True
         assert settings.confirm_destructive_source is True
         assert settings.confirm_destructive_target is False
-        assert settings.show_diff_threshold == 100
+        assert settings.show_diff_threshold == 20
         assert settings.detect_renames is True
         assert settings.rename_similarity_threshold == 1.0
 

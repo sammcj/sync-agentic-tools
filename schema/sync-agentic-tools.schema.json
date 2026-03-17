@@ -54,9 +54,9 @@
           "default": false
         },
         "show_diff_threshold": {
-          "description": "Show diff for files larger than this many lines.",
+          "description": "Maximum number of diff lines to display per modified file. Diffs longer than this are truncated. Set to 0 to disable auto-diff display.",
           "type": "integer",
-          "default": 100,
+          "default": 20,
           "minimum": 0
         },
         "detect_renames": {

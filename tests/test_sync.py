@@ -1,7 +1,6 @@
 """Tests for sync module."""
 
-
-
+from sync_agentic_tools.backup import BackupManager
 from sync_agentic_tools.config import Config, Settings, ToolConfig
 from sync_agentic_tools.sync import SyncDirection, SyncEngine
 
@@ -183,17 +182,25 @@ class TestSyncEngine:
 
     def test_sync_modified_file_push(self, tmp_path):
         """Test syncing modified file in push mode."""
+        import os
+        import time
+
         source = tmp_path / "source"
         target = tmp_path / "target"
         source.mkdir()
         target.mkdir()
 
-        # Create file in both locations with different content
-        (source / "test.txt").write_text("new content")
+        # Create target first, then source, to ensure source is strictly newer
         (target / "test.txt").write_text("old content")
+        time.sleep(0.05)
+        (source / "test.txt").write_text("new content")
+        # Belt-and-braces: force source mtime to be 1s ahead
+        now = time.time()
+        os.utime(source / "test.txt", (now, now))
+        os.utime(target / "test.txt", (now - 1, now - 1))
 
         config = Config(
-            settings=Settings(respect_gitignore=False),
+            settings=Settings(respect_gitignore=False, show_diff_threshold=0),
             tools={
                 "test_tool": ToolConfig(
                     name="test_tool",
@@ -208,6 +215,7 @@ class TestSyncEngine:
 
         # Sync in push mode
         engine = SyncEngine(config, dry_run=False)
+        engine.backup_manager = BackupManager(backup_root=tmp_path / "backups")
         result = engine.sync_tool("test_tool", SyncDirection.PUSH)
 
         assert result is True

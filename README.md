@@ -102,40 +102,40 @@ The configuration file (`~/.sync-agentic-tools.yaml`) defines:
 # ~/.agentic-sync.yaml
 settings:
   # Backup settings
-  backup_retention_days: 90          # Keep backups for 90 days
-  backup_retention_count: 30         # Keep last 30 backups
-  auto_cleanup_backups: true         # Automatically clean old backups
-  compress_old_backups: true         # Compress backups older than 7 days
-  follow_symlinks: false             # Don't follow symbolic links
-  respect_gitignore: true            # Automatically exclude files from .gitignore
+  backup_retention_days: 90 # Keep backups for 90 days
+  backup_retention_count: 30 # Keep last 30 backups
+  auto_cleanup_backups: true # Automatically clean old backups
+  compress_old_backups: true # Compress backups older than 7 days
+  follow_symlinks: false # Don't follow symbolic links
+  respect_gitignore: true # Automatically exclude files from .gitignore
 
   # Safety settings
-  confirm_destructive_source: true    # Ask before overwriting source files
-  confirm_destructive_target: false   # Don't ask before copying to target
-  show_diff_threshold: 1             # Show diff for files larger than 1 lines
+  confirm_destructive_source: true # Ask before overwriting source files
+  confirm_destructive_target: false # Don't ask before copying to target
+  show_diff_threshold: 20 # Max lines of diff to show per file (0 to disable)
 
   # Behaviour
-  detect_renames: true               # Detect when files are renamed
-  rename_similarity_threshold: 1.0   # Require 100% match for rename detection
+  detect_renames: true # Detect when files are renamed
+  rename_similarity_threshold: 1.0 # Require 100% match for rename detection
 
 # Reusable exclude pattern rulesets
 # Tools can reference these to avoid duplicating common patterns
 exclude_rulesets:
   common:
-    - "**/.DS_Store"         # Exclude macOS metadata files
-    - "**/.vscode/**"        # Exclude VS Code settings
-    - "debug/**"             # Exclude debug directory
-    - "file-history/**"      # Exclude file history
-    - "session-env/**"       # Exclude session environment
-    - "**/*.log"             # Exclude all log files
-    - "**/*.env"             # Exclude all env files
-    - "**/*.tmp"             # Exclude all tmp files
-    - "**/*.local.*"         # Exclude all local files
-    - "**/temp/**"           # Exclude temp directories
-    - "**/*-backup.*"        # Exclude backup files
+    - "**/.DS_Store" # Exclude macOS metadata files
+    - "**/.vscode/**" # Exclude VS Code settings
+    - "debug/**" # Exclude debug directory
+    - "file-history/**" # Exclude file history
+    - "session-env/**" # Exclude session environment
+    - "**/*.log" # Exclude all log files
+    - "**/*.env" # Exclude all env files
+    - "**/*.tmp" # Exclude all tmp files
+    - "**/*.local.*" # Exclude all local files
+    - "**/temp/**" # Exclude temp directories
+    - "**/*-backup.*" # Exclude backup files
 
   private:
-    - "skills/private-*/**"  # Exclude private skills
+    - "skills/private-*/**" # Exclude private skills
 
 # Tools define named applications to manage synchronisation for
 # Propagation rules at the bottom can reference these tools (or use direct file paths)
@@ -194,7 +194,6 @@ tools:
   #     - "**/logs/**"
   #     - "GEMINI.md"             # Exclude - auto-propagated from Claude
 
-
 # Propagation rules to copy files between tools with transformations
 # Supports two modes:
 #   1. Tool-based: Uses tool definitions, always syncs target directories
@@ -213,7 +212,7 @@ propagate:
         target_file: rules/CLINE_RULES.md
         transforms:
           - type: sed
-            pattern: 's/Claude/Cline/g'
+            pattern: "s/Claude/Cline/g"
           - type: remove_xml_sections
             sections:
               - "CLAUDE_PARALLEL_TASKS"
@@ -224,38 +223,38 @@ propagate:
       - dest_path: ~/.gemini/GEMINI.md
         transforms:
           - type: sed
-            pattern: 's/Claude Code/Gemini CLI/g'
+            pattern: "s/Claude Code/Gemini CLI/g"
           - type: sed
-            pattern: 's/Claude/Gemini/g'
+            pattern: "s/Claude/Gemini/g"
 
       - dest_path: ~/.codex/AGENTS.md
         transforms:
           - type: sed
-            pattern: 's/Claude Code/Codex/g'
+            pattern: "s/Claude Code/Codex/g"
           - type: sed
-            pattern: 's/Claude/Codex/g'
+            pattern: "s/Claude/Codex/g"
 
       - dest_path: ~/Documents/Cline/Rules/CLINE_RULES.md
         transforms:
           - type: sed
-            pattern: 's/Claude/Cline/g'
+            pattern: "s/Claude/Cline/g"
           - type: remove_xml_sections
             sections:
               - "CLAUDE_PARALLEL_TASKS"
 
   - source_path: ~/.claude/commands
     exclude:
-      - "CLAUDE.md"           # Exclude specific file
-      - "*.bak"               # Exclude by pattern
-      - "private-*"           # Exclude files starting with "private-"
-      - "test/*"              # Exclude files in test directory
+      - "CLAUDE.md" # Exclude specific file
+      - "*.bak" # Exclude by pattern
+      - "private-*" # Exclude files starting with "private-"
+      - "test/*" # Exclude files in test directory
     targets:
       - dest_path: ~/Documents/Cline/Workflows
         transforms:
           - type: sed
-            pattern: 's/Claude Code/Cline/g'
+            pattern: "s/Claude Code/Cline/g"
           - type: sed
-            pattern: 's/Claude/Cline/g'
+            pattern: "s/Claude/Cline/g"
 
   # Example: Source→Source propagation using absolute paths
   # (For direct local-to-local copies without going through targets)
@@ -271,7 +270,6 @@ propagate:
   #         - type: sed
   #           pattern: 's/Claude Code/Codex/g'
 
-
   # Example: Mixed - tool-based + absolute paths
   # - source_tool: claude
   #   source_file: skills/shell-scripting.md
@@ -283,7 +281,6 @@ propagate:
   #       transforms:
   #         - type: sed
   #           pattern: 's/Claude/Codex/g'
-
 ```
 
 ## Terminology
@@ -304,7 +301,7 @@ Key terms and concepts used in agentic-sync:
   - `**` matches any number of directory levels recursively
   - Example: `skills/**` matches all files under `skills/` directory
 - **special_handling**: Per-file rules for syncing only specific parts of a file. Currently supports `extract_keys` mode to sync only specific JSON keys (e.g., only sync the `permissions` key from `settings.json`).
-- **show_diff_threshold**: Number of lines above which diffs are displayed when syncing modified files. Set to `1` to always show diffs, or higher values to only show for large changes.
+- **show_diff_threshold**: Maximum number of diff lines to display per modified file. Diffs longer than this are truncated with a note showing how many lines were omitted. Set to `0` to disable auto-diff display.
 - **rename_similarity_threshold**: Threshold (0.0-1.0) for detecting file renames. Set to `1.0` (default) to require exact content match, or lower values to detect renames of similar files. Used to avoid treating renames as delete+add operations.
 - **transform**: Modification applied during propagation:
   - `sed`: Regex find-and-replace (e.g., `s/Claude/Cline/g`)
@@ -387,11 +384,13 @@ sync-agentic-tools sync --tool claude
 ### Multi-Machine Setup
 
 **Machine 1 (initial push):**
+
 ```bash
 sync-agentic-tools sync
 ```
 
 **Machine 2 (pull and ongoing sync):**
+
 ```bash
 # First time: pull from target
 sync-agentic-tools sync --pull
@@ -403,6 +402,7 @@ sync-agentic-tools sync --bidirectional
 ### Handling Conflicts
 
 When both source and target have changed:
+
 ```
 CONFLICT: CLAUDE.md
   Source: modified 2025-01-15 10:30
@@ -451,20 +451,22 @@ propagate:
       - dest_path: ~/.gemini/GEMINI.md
         transforms:
           - type: sed
-            pattern: 's/Claude Code/Gemini CLI/g'
+            pattern: "s/Claude Code/Gemini CLI/g"
 ```
 
 **Benefits:**
+
 - Fast (no target intermediate step)
 - Direct source-to-source sync
 - Perfect for maintaining tool-specific versions of a source-of-truth file
 
 **Important:** Exclude propagated files from sync to prevent conflicts:
+
 ```yaml
 tools:
   gemini:
     exclude:
-      - "GEMINI.md"  # Auto-propagated from Claude
+      - "GEMINI.md" # Auto-propagated from Claude
 ```
 
 ### Target→Target (Traditional)
@@ -494,10 +496,11 @@ propagate:
 ### Available Transformations
 
 - **sed**: Regex find-and-replace
+
   ```yaml
   transforms:
     - type: sed
-      pattern: 's/Claude/Cline/g'
+      pattern: "s/Claude/Cline/g"
   ```
 
 - **remove_xml_sections**: Remove XML-tagged sections

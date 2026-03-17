@@ -14,7 +14,7 @@ settings:
   # Safety settings
   confirm_destructive_source: true   # Ask before overwriting source files
   confirm_destructive_target: true   # Don't ask before copying to target
-  show_diff_threshold: 1             # Show diff for files larger than 1 lines
+  show_diff_threshold: 20            # Max lines of diff to show per file (0 to disable)
 
   # Behaviour
   detect_renames: true               # Detect when files are renamed

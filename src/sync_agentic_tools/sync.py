@@ -173,6 +173,9 @@ class SyncEngine:
         direction_str = self._direction_str(direction)
         show_summary(changes, tool_name, direction_str, str(tool.source), str(tool.target))
 
+        # Auto-show diffs for files under the threshold
+        self._show_auto_diffs(plan, changes)
+
         # In dry-run mode, stop here
         if self.dry_run:
             show_info("Dry run mode - no changes made")
@@ -906,6 +909,72 @@ class SyncEngine:
             )
 
         return changes
+
+    def _show_auto_diffs(self, plan: SyncPlan, changes: list[FileChange]) -> None:
+        """Auto-display diffs for modified files, truncated to the configured line limit."""
+        from .ui import show_diff
+
+        max_lines = self.config.settings.show_diff_threshold
+        if max_lines <= 0:
+            return
+
+        modified_relpaths = {
+            c.relative_path
+            for c in changes
+            if c.change_type == ChangeType.MODIFIED and c.diff_stats
+        }
+
+        if not modified_relpaths:
+            return
+
+        shown: set[str] = set()
+
+        for source, dest in plan.files_to_copy:
+            if not dest.exists():
+                continue
+
+            if plan.direction == SyncDirection.PUSH:
+                relpath = str(source.relative_to(plan.tool.source))
+            else:
+                relpath = str(source.relative_to(plan.tool.target))
+
+            if relpath not in modified_relpaths or relpath in shown:
+                continue
+
+            src_ext = self._extract_special_handling_content(plan.tool, source)
+            dst_ext = self._extract_special_handling_content(plan.tool, dest)
+            if src_ext is not None and dst_ext is not None:
+                diff_lines, _ = generate_diff_between_strings(
+                    src_ext, dst_ext, str(source), str(dest)
+                )
+            else:
+                diff_lines, _ = generate_unified_diff(source, dest)
+
+            truncated = len(diff_lines) > max_lines
+            show_diff(relpath, diff_lines[:max_lines] if truncated else diff_lines, "source", "target")
+            if truncated:
+                show_info(f"(diff truncated to {max_lines} lines, {len(diff_lines) - max_lines} more not shown)")
+            shown.add(relpath)
+
+        for source, target in plan.reverse_suggestions:
+            relpath = str(source.relative_to(plan.tool.source))
+            if relpath not in modified_relpaths or relpath in shown:
+                continue
+
+            src_ext = self._extract_special_handling_content(plan.tool, source)
+            tgt_ext = self._extract_special_handling_content(plan.tool, target)
+            if src_ext is not None and tgt_ext is not None:
+                diff_lines, _ = generate_diff_between_strings(
+                    src_ext, tgt_ext, str(source), str(target)
+                )
+            else:
+                diff_lines, _ = generate_unified_diff(source, target)
+
+            truncated = len(diff_lines) > max_lines
+            show_diff(relpath, diff_lines[:max_lines] if truncated else diff_lines, "source", "target")
+            if truncated:
+                show_info(f"(diff truncated to {max_lines} lines, {len(diff_lines) - max_lines} more not shown)")
+            shown.add(relpath)
 
     def _direction_str(self, direction: SyncDirection) -> str:
         """Get human-readable direction string."""
