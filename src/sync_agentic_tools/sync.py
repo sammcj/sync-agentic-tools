@@ -489,13 +489,13 @@ class SyncEngine:
                         tgt_ext = self._extract_special_handling_content(tool, target_path)
                         if src_ext is not None and tgt_ext is not None:
                             diff_lines, _ = generate_diff_between_strings(
-                                src_ext, tgt_ext, str(source_path), str(target_path)
+                                tgt_ext, src_ext, str(target_path), str(source_path)
                             )
                         else:
-                            diff_lines, _ = generate_unified_diff(source_path, target_path)
+                            diff_lines, _ = generate_unified_diff(target_path, source_path)
                         from .ui import show_diff
 
-                        show_diff(relpath, diff_lines, "source", "target")
+                        show_diff(relpath, diff_lines, "target", "source")
                         choice = show_reverse_sync_prompt(relpath, source_info, target_info, special_keys)
 
                     if choice == "pull":
@@ -539,13 +539,13 @@ class SyncEngine:
                         tgt_ext = self._extract_special_handling_content(tool, target_path)
                         if src_ext is not None and tgt_ext is not None:
                             diff_lines, _ = generate_diff_between_strings(
-                                src_ext, tgt_ext, str(source_path), str(target_path)
+                                tgt_ext, src_ext, str(target_path), str(source_path)
                             )
                         else:
-                            diff_lines, _ = generate_unified_diff(source_path, target_path)
+                            diff_lines, _ = generate_unified_diff(target_path, source_path)
                         from .ui import show_diff
 
-                        show_diff(relpath, diff_lines, "source", "target")
+                        show_diff(relpath, diff_lines, "target", "source")
                         choice = show_conflict_resolution_prompt(relpath, source_info, target_info, special_keys)
 
                     if choice == "keep_source":
@@ -852,10 +852,10 @@ class SyncEngine:
                 dest_extracted = self._extract_special_handling_content(plan.tool, dest)
                 if source_extracted is not None and dest_extracted is not None:
                     diff_stats = count_diff_lines_from_strings(
-                        source_extracted, dest_extracted, str(source), str(dest)
+                        dest_extracted, source_extracted, str(dest), str(source)
                     )
                 else:
-                    diff_stats = count_diff_lines(source, dest)
+                    diff_stats = count_diff_lines(dest, source)
             else:
                 change_type = ChangeType.NEW
                 diff_stats = None
@@ -884,10 +884,10 @@ class SyncEngine:
             target_extracted = self._extract_special_handling_content(plan.tool, target)
             if source_extracted is not None and target_extracted is not None:
                 diff_stats = count_diff_lines_from_strings(
-                    source_extracted, target_extracted, str(source), str(target)
+                    target_extracted, source_extracted, str(target), str(source)
                 )
             else:
-                diff_stats = count_diff_lines(source, target)
+                diff_stats = count_diff_lines(target, source)
             changes.append(
                 FileChange(
                     relpath,
@@ -945,13 +945,13 @@ class SyncEngine:
             dst_ext = self._extract_special_handling_content(plan.tool, dest)
             if src_ext is not None and dst_ext is not None:
                 diff_lines, _ = generate_diff_between_strings(
-                    src_ext, dst_ext, str(source), str(dest)
+                    dst_ext, src_ext, str(dest), str(source)
                 )
             else:
-                diff_lines, _ = generate_unified_diff(source, dest)
+                diff_lines, _ = generate_unified_diff(dest, source)
 
             truncated = len(diff_lines) > max_lines
-            show_diff(relpath, diff_lines[:max_lines] if truncated else diff_lines, "source", "target")
+            show_diff(relpath, diff_lines[:max_lines] if truncated else diff_lines, "target", "source")
             if truncated:
                 show_info(f"(diff truncated to {max_lines} lines, {len(diff_lines) - max_lines} more not shown)")
             shown.add(relpath)
@@ -965,13 +965,13 @@ class SyncEngine:
             tgt_ext = self._extract_special_handling_content(plan.tool, target)
             if src_ext is not None and tgt_ext is not None:
                 diff_lines, _ = generate_diff_between_strings(
-                    src_ext, tgt_ext, str(source), str(target)
+                    tgt_ext, src_ext, str(target), str(source)
                 )
             else:
-                diff_lines, _ = generate_unified_diff(source, target)
+                diff_lines, _ = generate_unified_diff(target, source)
 
             truncated = len(diff_lines) > max_lines
-            show_diff(relpath, diff_lines[:max_lines] if truncated else diff_lines, "source", "target")
+            show_diff(relpath, diff_lines[:max_lines] if truncated else diff_lines, "target", "source")
             if truncated:
                 show_info(f"(diff truncated to {max_lines} lines, {len(diff_lines) - max_lines} more not shown)")
             shown.add(relpath)
